@@ -1,0 +1,412 @@
+Last login: Wed Jan 15 18:00:25 on ttys000
+MacBook-Pro-di-Salvo:~ salvofirera$ ocaml
+        OCaml version 4.08.1
+
+# type ide = string;;
+
+type op = Sum | Sub | Mul;;
+
+type bool_op = And | Or;;
+
+type eq_op = Equal | Greater | Lower | GEq | LEq;;
+
+(* aggiungo le nuove funzionalità all'interprete base *)
+
+type exp =
+    | EInt of int
+    | EBool of bool
+    | Not of exp
+    | Ide of ide
+    | Op of exp * op * exp
+    | BoolOp of exp * bool_op * exp
+    | EqOp of exp * eq_op * exp
+    | EDictionary of (ide * exp) list
+    | Insert of ide * exp * exp
+    | Delete of ide * exp
+    | HasKey of ide * exp
+    | Iterate of exp * exp
+    | Filter of (ide list) * exp
+    | Fold of exp * exp
+    | IfThenElse of exp * exp * exp
+    | Let of ide * exp * exp
+    | Fun of ide * exp
+    | RecFun of ide * ide * exp
+    | FunCall of exp * exp
+    | FunTwo of ide * ide * exp
+    | FunCallTwo of exp * exp * exp;;    (* 31-32 estensione per funzioni con 2 parametri *)
+
+(* tipi riconosciuti *)
+
+type evT =
+    | Int of int
+    | Bool of bool
+    | String of string
+    | Dictionary of (ide * evT) list
+    | Ftype ide = string
+#   type op = Sum | Sub | Mul
+#   type bool_op = And | Or
+#   type eq_op = Equal | Greater | Lower | GEq | LEq
+#                                                 type exp =
+    EInt of int
+  | EBool of bool
+  | Not of exp
+  | Ide of ide
+  | Op of exp * op * exp
+  | BoolOp of exp * bool_op * exp
+  | EqOp of exp * eq_op * exp
+  | EDictionary of (ide * exp) list
+  | Insert of ide * exp * exp
+  | Delete of ide * exp
+  | HasKey of ide * exp
+  | Iterate of exp * exp
+  | Filter of ide list * exp
+  | Fold of exp * exp
+  | IfThenElse of exp * exp * exp
+  | Let of ide * exp * exp
+  | Fun of ide * exp
+  | RecFun of ide * ide * exp
+  | FunCall of exp * exp
+  | FunTwo of ide * ide * exp
+  | FunCallTwo of exp * exp * exp
+#                   Closure of ide * ide * exp * env
+    | FunTwoClosure of ide * ide * exp * env   (* per gestire le funzioni con due parametri *)
+    | Unbound
+and env = (ide * evT) list;;
+
+let emptyEnv = [("",Unbound)];;
+
+let bind (var : ide) (v : evT) (e : env) : env = (var, v) :: e;;
+
+(* binding per funzioni con accumulatore *)
+let bindTwo (x : ide) (y : ide) (v1 : evT) (v2 : evT) (e : env) : env =
+    (x, v1) :: (y, v2) :: e;;
+
+let rec lookup (id : ide) (r : env) : evT = match r with
+    | [] -> Unbound
+    | (x, value) :: l -> if(id = x) then value else lookup id l;;
+
+let typecheck (s : string) (e : evT) : bool = match s with
+    | "int" -> (match e with
+             Int(_) -> true
+             | _ -> false)
+    | "bool" -> (match e with
+              Bool(_) -> true
+              | _ -> false)
+    | "string" -> (match e with
+              String(_) -> true
+              | _ -> false)
+    | "dizionario" -> (match e with       (* aggiungo il tipo dizionario al typechecking dinamico *)
+                type evT =
+    Int of int
+  | Bool of bool
+  | String of string
+  | Dictionary of (ide * evT) list
+  | FunClosure of ide * exp * env
+  | RecClosure of ide * ide * exp * env
+  | FunTwoClosure of ide * ide * exp * env
+  | Unbound
+and env = (ide * evT) list
+#   val emptyEnv : (string * evT) list = [("", Unbound)]
+#   val bind : ide -> evT -> env -> env = <fun>
+#       val bindTwo : ide -> ide -> evT -> evT -> env -> env = <fun>
+#       val lookup : ide -> env -> evT = <fun>
+#                          -> true
+              | _ -> false)
+    | _ -> failwith("Unknown Type");;
+
+let eval_not (e : evT) : evT = match e with
+         | Bool(true) -> Bool(false)
+         | Bool(false) -> Bool(true)
+         | _ -> failwith("Invalid Type(required boolean)");;
+
+(* un "typecheking interno" che controlla il tipo di valori nel dizionario *)
+let dicType (d : (ide * evT) list) : string = match d with
+    | [] -> failwith("Something gone wrong!")
+    | (key, info) :: xs -> (match info with
+                            | Int(_) -> "int"
+                            | Bool(_) -> "bool"
+                            | String(_) -> "string"
+                            | _ -> failwith("Type Not Allowed"));;
+
+let eval_op (e1 : evT) (o : op) (e2 : evT) : evT = match e1, o, e2 with
+    | Int(x), op, Int(y) -> (match op with
+                            |Sum -> Int(x+y)
+                            |Sub -> Int(x-y)
+                            |Mul -> Int(x*y))
+    | _ -> failwith("Invalid Type");;
+
+let eval    val typecheck : string -> evT -> bool = <fun>
+#         val eval_not : evT -> evT = <fun>
+#                 val dicType : (ide * evT) list -> string = <fun>
+#             val eval_op : evT -> op -> evT -> evT = <fun>
+#   _bool (a : evT) (o : bool_op) (b : evT) : evT = match a, o, b with
+    | Bool(a), op, Bool(b) -> (match op with
+                               |And -> Bool(a && b)
+                               |Or -> Bool(a || b))
+    | _ -> failwith("Invalid Type");;
+
+let eval_eq (x : evT) (o : eq_op) (y : evT) : evT = match x, o, y with
+    | Bool(x), op, Bool(y) -> (match op with
+                               Equal -> if(x = y) then Bool(true)
+                                        else Bool(false)
+                               | _ -> failwith("Invalid Operation for boolean"))
+    | Int(x), op, Int(y) -> (match op with
+                             Equal -> if(x = y) then Bool(true)
+                                      else Bool(false)
+                             | Greater -> if(x > y) then Bool(true)
+                                        else Bool(false)
+                             | Lower -> if(x < y) then Bool(true)
+                                      else Bool(false)
+                               val eval_bool : evT -> bool_op -> evT -> evT = <fun>
+#                           GEq -> if (x >= y) then Bool(true)
+                                    else Bool(false)
+                             | LEq -> if (x <= y) then Bool(true)
+                                    else Bool(false))
+    | _ -> failwith("Invalid Type");;
+
+(* controlla se una chiave è presente in un dizionario *)
+let rec memberDict (d: (ide * evT) list) (k: ide) = match d with
+    | []-> false
+    | (key,info) :: xs -> if (key=k) then true else memberDict xs k;; (*true else memberDict xs k*);;
+
+(* controlla se un elemento è presente in una lista *)
+let rec member n l = match l with
+    | [] -> false
+    | x :: xs -> if(x = n) then true else member n xs;;
+
+(* controlla che il dato inserito sia conforme con il tipo del dizionario *)
+let evInsert (x: ide) (v: evT) (d: (ide * evT) list): (ide * evT) list  = match d with
+    [] -> [ (x,v) ]
+    | (key,info) :: xs -> if  (typecheck (dicType d) v && (memberDict d x) = false)
+                                  then (x,v)::d
+                           val eval_eq : evT -> eq_op -> evT -> evT = <fun>
+#         val memberDict : (ide * evT) list -> ide -> bool = <fun>
+#         val member : 'a -> 'a list -> bool = <fun>
+#                    else failwith("Dinzionario non omogeneo");;
+
+let rec evDelete (x:ide) (d: (ide * evT) list) = match d with
+    [] -> failwith("Key not found")
+    | (key,info) :: xs -> if (key=x) then xs
+                          else (key,info) :: evDelete x xs;;
+
+let rec evFilter (x: ide list) (d: (ide * evT) list) : (ide * evT) list = match d with
+    [] -> []
+    | (key,info) :: xs -> if (member key x) then (key,info) :: evFilter x xs
+                         else evFilter x xs;;
+
+(* controlla se un intero dizionario è omogeneo *)
+let rec checkOver ( d: (ide * evT) list) = match d with
+    [] -> true
+    | (key,info)::[] -> true
+    | (key1,info1)::(key2,info2)::xs -> ( match info1, info2 with
+                                        | Int(_),Int(_) -> checkOver ( (key2,info2) :: xs)
+                                        | String(_),String(_) -> checkOver ( (key2,info2) :: xs)
+                                        | Bool(_),Bool(_) -> checkOver ( (key2,info2) :: xs)
+                       val evInsert : ide -> evT -> (ide * evT) list -> (ide * evT) list = <fun>
+#         val evDelete : ide -> (ide * evT) list -> (ide * evT) list = <fun>
+#         val evFilter : ide list -> (ide * evT) list -> (ide * evT) list = <fun>
+#                                    | _,_ -> false) ;;
+
+let rec eval (e : exp) (r : env) : evT = match e with
+    | EInt(x) -> Int(x)
+    | EBool(b) -> Bool(b)
+    | Not(b) -> eval_not (eval b r)
+    | Ide(x) -> lookup x r
+    | Op(x, o, y) -> eval_op (eval x r) o (eval y r)
+    | BoolOp(a, o, b) -> eval_bool (eval a r) o (eval b r)
+    | EqOp(x, o, y) -> eval_eq (eval x r) o (eval y r)
+    | EDictionary(lst) ->let auxDict= Dictionary(dictEv lst r) in
+                            (match auxDict with
+                            |  Dictionary(l) -> if ( checkOver l) then auxDict
+                                               else failwith ("Dizionario non omogeneo")
+                            |_ -> failwith("Something gone wrong!"))
+    | Insert(k, v, d) -> let tmp = eval d r in
+                               let tmpVal = eval v r in
+                                 (match tmp with
+                                 | Dictionary(l) -> Dictionary(evInsert k tmpVal l)
+                                 | _ -> fval checkOver : (ide * evT) list -> bool = <fun>
+#                                     ailwith("Type Error"))    (* se l non è un dizionario *)
+    | IfThenElse(cond, a, b) -> (match eval cond r with
+                                   | Bool(true) -> eval a r
+                                   | Bool(false) -> eval b r
+                                   | _ -> failwith("Non-Boolean Condition"))
+    | Delete(k, d) -> let tmp = eval d r in
+                             (match tmp with
+                               | Dictionary(l) -> Dictionary(evDelete k l)
+                               | _ -> failwith("Type Error"))
+    | Filter(k, d) -> let tmp = eval d r in
+                         (match tmp with
+                          | Dictionary(l) -> Dictionary(evFilter k l)
+                          | _ -> failwith("Type Error"))
+    | HasKey(k, d) -> let tmp = eval d r in
+                           (match tmp with
+                           | Dictionary(l) -> if(memberDict l k) then Bool(true)
+                                        else Bool(false)
+                                                             | _ -> failwith("Type Error"))
+    | Let(id, e1, e2) -> eval e2 (bind id (eval e1 r) r)
+    | Fun(param, body) -> FunClosure(param, body, r)
+    | RecFun(id, param, body) -> RecClosure(id, param, body, r)
+    | FunCall(f, e) -> let evalue = eval e r in
+                           let fclose = eval f r in
+                               (match fclose with
+                                | FunClosure(idparam, body, env) ->
+                                    eval body (bind idparam evalue env)
+                                | RecClosure(fid, idparam, body, env) ->
+                                    let recEnv = bind fid fclose env in
+                                        eval body (bind idparam evalue recEnv)
+                                | _ -> failwith("Invalid function"))
+    | FunTwo(par, acc, body) -> FunTwoClosure(par, acc, body, r)  (* funzione che prende due parametri *)
+    | FunCallTwo(f, e, a) -> let evalue = eval e r in
+                                let aval                              al a r in
+                                  let fclose = eval f r in
+                                  (match fclose with
+                                    | FunTwoClosure(par, acc, body, env) ->
+                                       eval body (bindTwo par acc evalue avalue env)
+                                    | _ -> failwith("Invalid function"))
+    | Fold(f, d) -> let a = EInt(0) in
+                          (match d, f with
+                            | EDictionary(l), FunTwo(par, acc, body) -> applyAll l f a r
+                            | _ -> failwith("Type Error"))
+    | Iterate(f, d) ->  (match d, f with
+                             | EDictionary(l), Fun(param, body) -> Dictionary(iterateEv l f r)
+                             | EDictionary(l), RecFun(id, param, body) -> Dictionary(iterateEv l f r)
+                             | _ -> failwith("Type Error"))
+
+(* mi restistuisce il dizionaro quando chiamo eval su un oggetto di tipo Dictionary *)
+and                                 dictEv (lst: (ide * exp) list ) (r: env) : (ide * evT) list = match lst with
+    [] -> []
+    | (key,info) :: xs -> (key, eval info r) :: dictEv xs r
+
+(* applica la funzione a tutti gli elementi del dizionario *)
+and iterateEv (lst : (ide * exp) list) (f : exp) (r : env) : (ide * evT) list = match lst with
+    [] -> []
+    | (key,info) :: xs -> let fCall = FunCall(f, info) in
+                              (key, eval fCall r) :: iterateEv xs f r
+
+(* applica la funzione con accumulatore a tutti gli elementi del dizionario *)
+and applyAll (lst : (ide * exp) list) (f : exp) (acc : exp) (r : env) : evT = match lst with
+        | [] -> failwith("Empty Dictionary")
+        | (key, info) :: [] -> let final = FunCallTwo(f, info, acc) in
+                                    eval final r
+        | (key, info) :: xs -> applyAll xs f (FunCallTwo(f, info, acc)) r ;;
+                              val eval : exp -> env -> evT = <fun>
+val dictEv : (ide * exp) list -> env -> (ide * evT) list = <fun>
+val iterateEv : (ide * exp) list -> exp -> env -> (ide * evT) list = <fun>
+val applyAll : (ide * exp) list -> exp -> exp -> env -> evT = <fun>
+# let env0 = emptyEnv;;
+val env0 : (string * evT) list = [("", Unbound)]
+# let f1 = Fun("x", Op(Ide "x",Mul,EInt 3));;
+val f1 : exp = Fun ("x", Op (Ide "x", Mul, EInt 3))
+# let val1 = FunCall(f1,EInt 5);;
+val val1 : exp = FunCall (Fun ("x", Op (Ide "x", Mul, EInt 3)), EInt 5)
+# eval val1 env0;;
+- : evT = Int 15
+# let sumTo = RecFun("sum","x",IfThenElse(EqOp(Ide "x",Equal,EInt 1), EInt 1, Op(Ide "x",Sum, FunCall(Ide "sum",Op(Ide "x",Sub,EInt 1)))));;
+val sumTo : exp =
+  RecFun ("sum", "x",
+   IfThenElse (EqOp (Ide "x", Equal, EInt 1), EInt 1,
+    Op (Ide "x", Sum, FunCall (Ide "sum", Op (Ide "x", Sub, EInt 1)))))
+# let val2 = FunCall(sumTo,EInt 4);; 
+val val2 : exp =
+  FunCall
+   (RecFun ("sum", "x",
+     IfThenElse (EqOp (Ide "x", Equal, EInt 1), EInt 1,
+      Op (Ide "x", Sum, FunCall (Ide "sum", Op (Ide "x", Sub, EInt 1))))),
+   EInt 4)
+# eval val2 env0;;
+- : evT = Int 10
+# let f2 = FunTwo("x","y",EqOp(Ide "x",GEq,Ide "y"));;
+val f2 : exp = FunTwo ("x", "y", EqOp (Ide "x", GEq, Ide "y"))
+# let val3 = FunCallTwo(f2,EInt 5,EInt 3);;
+val val3 : exp =
+  FunCallTwo (FunTwo ("x", "y", EqOp (Ide "x", GEq, Ide "y")), EInt 5,
+   EInt 3)
+# let val4 = FunCallTwo(f2,EInt 4,EInt 12);;
+val val4 : exp =
+  FunCallTwo (FunTwo ("x", "y", EqOp (Ide "x", GEq, Ide "y")), EInt 4,
+   EInt 12)
+# eval val3 env0;;
+- : evT = Bool true
+# eval val4 env0;;
+- : evT = Bool false
+# let myDict = EDictionary ([("Alpha",EInt 1);("Beta",EInt 2);("Gamma",EInt 3)]);; 
+val myDict : exp =
+  EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)]
+# eval myDict env0;;
+- : evT = Dictionary [("Alpha", Int 1); ("Beta", Int 2); ("Gamma", Int 3)]
+# let myDict1 = Insert("Delta",EInt 4,myDict);;
+val myDict1 : exp =
+  Insert ("Delta", EInt 4,
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval myDict1 env0;;
+- : evT =
+Dictionary
+ [("Delta", Int 4); ("Alpha", Int 1); ("Beta", Int 2); ("Gamma", Int 3)]
+# let plus1 = Fun("x",Op(Ide "x",Sum,EInt 1));;
+val plus1 : exp = Fun ("x", Op (Ide "x", Sum, EInt 1))
+# let dictPlus1 = Iterate(plus1,myDict);;
+val dictPlus1 : exp =
+  Iterate (Fun ("x", Op (Ide "x", Sum, EInt 1)),
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval dictPlus1 env0;;
+- : evT = Dictionary [("Alpha", Int 2); ("Beta", Int 3); ("Gamma", Int 4)]
+# let plus1Acc = FunTwo("x","acc",Op(Ide "acc",Sum,Op(Ide "x",Sum,EInt 1)));;
+val plus1Acc : exp =
+  FunTwo ("x", "acc", Op (Ide "acc", Sum, Op (Ide "x", Sum, EInt 1)))
+# let foldTest = Fold(plus1Acc,myDict);;
+val foldTest : exp =
+  Fold (FunTwo ("x", "acc", Op (Ide "acc", Sum, Op (Ide "x", Sum, EInt 1))),
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval foldTest env0;;
+- : evT = Int 9
+# let checkAlpha = HasKey("Alpha",myDict);; 
+val checkAlpha : exp =
+  HasKey ("Alpha",
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval checkAlpha env0;;
+- : evT = Bool true
+# let checkArance = HasKey("Arance",myDict);; 
+val checkArance : exp =
+  HasKey ("Arance",
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval checkArance env0;;
+- : evT = Bool false
+# let myDict2 = Delete("Gamma",myDict);; 
+val myDict2 : exp =
+  Delete ("Gamma",
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval myDict2 env0;;
+- : evT = Dictionary [("Alpha", Int 1); ("Beta", Int 2)]
+# let subDict = Filter(["Beta";"Delta"],myDict);;
+val subDict : exp =
+  Filter (["Beta"; "Delta"],
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval subDict env0;;
+- : evT = Dictionary [("Beta", Int 2)]
+# let myDict3 = Insert("Pi",EBool false,myDict);;
+val myDict3 : exp =
+  Insert ("Pi", EBool false,
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval myDict3  env0;;
+Exception: Failure "Dinzionario non omogeneo".
+# let emptyDict = EDictionary ([]);;
+val emptyDict : exp = EDictionary []
+# let foldOnEmpty = Fold(plus1Acc,emptyDict);;
+val foldOnEmpty : exp =
+  Fold (FunTwo ("x", "acc", Op (Ide "acc", Sum, Op (Ide "x", Sum, EInt 1))),
+   EDictionary [])
+# eval foldOnEmpty env0;;
+Exception: Failure "Empty Dictionary".
+# let error01 = Delete("Eta",myDict);;
+val error01 : exp =
+  Delete ("Eta",
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval error01 env0;;
+Exception: Failure "Key not found".
+# let error02 = Filter(["Phi";"Sigma"],myDict);;
+val error02 : exp =
+  Filter (["Phi"; "Sigma"],
+   EDictionary [("Alpha", EInt 1); ("Beta", EInt 2); ("Gamma", EInt 3)])
+# eval error02 env0;;
+- : evT = Dictionary []
+# 
